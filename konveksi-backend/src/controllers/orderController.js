@@ -30,11 +30,13 @@ async function updateStockForOrder(order) {
   }
 }
 
-function sendWA(order, message) {
-  if (whatsappService.isReady && order.customer.phone) {
-    whatsappService.sendMessage(order.customer.phone, message).catch(err => {
-      console.error('WA notification failed:', err.message);
-    });
+async function sendWA(order, message) {
+  try {
+    if (order.customer.phone) {
+      await whatsappService.sendMessage(order.customer.phone, message);
+    }
+  } catch (err) {
+    console.error('WA notification failed:', err.message);
   }
 }
 
@@ -68,7 +70,9 @@ export const createOrder = async (req, res, next) => {
       msg += `*Status: PENDING*\n\n`;
       msg += `Silakan lakukan pembayaran:\n${midtrans.redirect_url}\n\n`;
       msg += `Terima kasih telah berbelanja di Dani Konveksi!`;
-      sendWA(order, msg);
+
+      // Tunggu WA terkirim sebelum kirim response ke user
+      await sendWA(order, msg);
 
       return res.status(201).json({
         success: true,
@@ -133,11 +137,21 @@ export const updateOrderStatus = async (req, res, next) => {
     order.status = status;
     await order.save();
 
-    if (whatsappService.isReady) {
-      whatsappService.sendOrderNotification(order).catch(err => {
-        console.error('WA notification failed:', err.message);
-      });
-    }
+    // Notif status baru
+    const statusText = {
+      pending: 'Menunggu pembayaran.',
+      paid: 'Pembayaran telah dikonfirmasi.',
+      processing: 'Pesanan sedang diproses.',
+      shipped: 'Pesanan telah dikirim.',
+      completed: 'Pesanan telah selesai.',
+      cancelled: 'Pesanan dibatalkan.'
+    };
+
+    let msg = buildOrderMessage(order, statusText[status]);
+    msg += `*Status: ${status.toUpperCase()}*\n\n`;
+    msg += `Terima kasih telah berbelanja di Dani Konveksi!`;
+
+    await sendWA(order, msg);
 
     res.json({ success: true, message: 'Status order berhasil diupdate', data: order });
   } catch (err) {
@@ -165,7 +179,7 @@ export const midtransNotification = async (req, res, next) => {
       msg += `*Status: BERHASIL*\n\n`;
       msg += `Pesanan Anda akan segera kami proses.\n`;
       msg += `Terima kasih telah berbelanja di Dani Konveksi!`;
-      sendWA(order, msg);
+      await sendWA(order, msg);
     }
 
     await order.save();
