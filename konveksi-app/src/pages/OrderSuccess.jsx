@@ -34,20 +34,21 @@ const OrderSuccess = () => {
     const handleConfirmWA = () => {
         if (!order) return;
 
-        // Nomor WA Admin - Silakan ganti sesuai keinginan
-        const adminPhone = "628820050";
+        // Mengambil nomor WA Admin dari Environment Variable Vercel
+        // Jika tidak ada, pakai nomor default Anda
+        const adminPhone = import.meta.env.VITE_ADMIN_PHONE || "6285866569894";
 
-        let message = `*KONFIRMASI PESANAN - DANI KONVEKSI*\n\n`;
-        message += `Halo Admin,\n`;
-        message += `Saya baru saja menyelesaikan pembayaran untuk pesanan berikut:\n\n`;
-        message += `*ID Pesanan:* ${order._id}\n`;
-        message += `*Nama:* ${order.customer.name}\n`;
-        message += `*Total:* Rp ${order.total.toLocaleString('id-ID')}\n\n`;
+        let message = `*PESANAN DANI KONVEKSI*\n\n`;
+        message += `Halo ${order.customer.name},\n`;
+        message += `Pembayaran Anda telah dikonfirmasi!\n\n`;
         message += `*Detail Pesanan:*\n`;
         order.items.forEach((item, i) => {
-            message += `- ${item.name} (${item.quantity}x)\n`;
+            message += `${i + 1}. ${item.name} - ${item.quantity}x @ Rp ${item.price.toLocaleString('id-ID')}\n`;
         });
-        message += `\nMohon segera diproses ya. Terima kasih!`;
+        message += `\n*Total: Rp ${order.total.toLocaleString('id-ID')}*\n`;
+        message += `*Status: BERHASIL*\n\n`;
+        message += `Pesanan Anda akan segera kami proses.\n`;
+        message += `Terima kasih telah berbelanja di Dani Konveksi!`;
 
         const encodedMessage = encodeURIComponent(message);
         const waUrl = `https://wa.me/${adminPhone}?text=${encodedMessage}`;
