@@ -11,9 +11,11 @@ class MidtransService {
     _initialize() {
         if (this.initialized) return;
 
-        this.isProduction = process.env.MIDTRANS_PRODUCTION === 'true';
-        const serverKey = process.env.MIDTRANS_SERVER_KEY;
-        const clientKey = process.env.MIDTRANS_CLIENT_KEY;
+        // Ambil dan bersihkan variabels (hapus spasi tersembunyi)
+        this.isProduction = String(process.env.MIDTRANS_PRODUCTION).trim() === 'true';
+        const serverKey = (process.env.MIDTRANS_SERVER_KEY || '').trim();
+        const clientKey = (process.env.MIDTRANS_CLIENT_KEY || '').trim();
+        const merchantId = (process.env.MIDTRANS_MERCHANT_ID || '').trim();
 
         if (!serverKey || !clientKey) {
             console.warn('Midtrans credentials not configured');
@@ -22,24 +24,24 @@ class MidtransService {
             return;
         }
 
-        console.log('Midtrans Initializing with:');
-        console.log('- Production:', this.isProduction);
-        console.log('- Server Key:', serverKey ? `${serverKey.substring(0, 10)}...` : 'MISSING');
-        console.log('- Client Key:', clientKey ? `${clientKey.substring(0, 10)}...` : 'MISSING');
+        console.log('--- Midtrans Config Check ---');
+        console.log('Mode:', this.isProduction ? 'PRODUCTION' : 'SANDBOX');
+        console.log('Server Key (first 10):', serverKey.substring(0, 10));
+        console.log('Merchant ID:', merchantId || 'not set');
+        console.log('-----------------------------');
 
         this.isConfigured = true;
 
-        this.snap = new midtransClient.Snap({
+        const config = {
             isProduction: this.isProduction,
             serverKey,
-            clientKey,
-        });
+            clientKey
+        };
 
-        this.coreApi = new midtransClient.CoreApi({
-            isProduction: this.isProduction,
-            serverKey,
-            clientKey,
-        });
+        if (merchantId) config.merchantId = merchantId;
+
+        this.snap = new midtransClient.Snap(config);
+        this.coreApi = new midtransClient.CoreApi(config);
 
         this.initialized = true;
     }
@@ -48,59 +50,50 @@ class MidtransService {
         this._initialize();
 
         if (!this.isConfigured) {
-            throw new Error('Midtrans belum dikonfigurasi. Set MIDTRANS_SERVER_KEY dan MIDTRANS_CLIENT_KEY di .env');
+            throw new Error('Midtrans belum dikonfigurasi. Cek Environment Variables di Vercel.');
         }
 
         const { items, customer, total, _id } = order;
 
         const item_details = items.map(item => ({
-            id: item.productId ? String(item.productId) : `item_${Date.now()}`,
+            id: item.productId ? String(item.productId).trim() : `item_${Date.now()}`,
             price: Math.round(Number(item.price) || 0),
             quantity: Number(item.quantity) || 1,
-            name: item.name || 'Item',
+            name: (item.name || 'Item').substring(0, 50),
         }));
 
         const parameter = {
             transaction_details: {
-                order_id: `ORDER_${_id}_${Date.now()}`,
+                // Gunakan ID yang sangat bersih
+                order_id: `ORDER-${_id}-${Date.now()}`,
                 gross_amount: Math.round(total),
             },
             item_details,
             customer_details: {
-                first_name: customer?.name || 'Customer',
+                first_name: (customer?.name || 'Customer').substring(0, 20),
                 email: customer?.email || 'customer@example.com',
-                phone: customer?.phone || '08123456789',
-                billing_address: {
-                    address: customer?.address || '',
-                    city: customer?.city || '',
-                    postal_code: customer?.postalCode || '',
-                },
-                shipping_address: {
-                    address: customer?.address || '',
-                    city: customer?.city || '',
-                    postal_code: customer?.postalCode || '',
-                }
+                phone: customer?.phone || '08123456789'
             },
             credit_card: { secure: true },
+            // Aktifkan semua metode pembayaran standar sandbox
             enabled_payments: [
                 'credit_card', 'bca_va', 'bni_va', 'bri_va',
-                'permata_va', 'other_va', 'gopay', 'shopeepay', 'qris'
-            ],
-            callbacks: {
-                finish: process.env.FRONTEND_URL || 'http://localhost:3000/order-success',
-                error: process.env.FRONTEND_URL || 'http://localhost:3000/order-failed',
-                pending: process.env.FRONTEND_URL || 'http://localhost:3000/order-pending'
-            }
+                'permata_va', 'gopay', 'qris', 'shopeepay'
+            ]
         };
 
-        const transaction = await this.snap.createTransaction(parameter);
-        console.log('Midtrans transaction created:', parameter.transaction_details.order_id);
-
-        return {
-            token: transaction.token,
-            redirect_url: transaction.redirect_url,
-            order_id: parameter.transaction_details.order_id
-        };
+        try {
+            const transaction = await this.snap.createTransaction(parameter);
+            console.log('✓ Midtrans Transaksi Berhasil Created:', parameter.transaction_details.order_id);
+            return {
+                token: transaction.token,
+                redirect_url: transaction.redirect_url,
+                order_id: parameter.transaction_details.order_id
+            };
+        } catch (err) {
+            console.error('❌ Midtrans API Error Details:', JSON.stringify(err.ApiResponse || err, null, 2));
+            throw err;
+        }
     }
 
     async getTransactionStatus(orderId) {
@@ -115,7 +108,6 @@ class MidtransService {
 
     async verifyNotification(notification) {
         this._initialize();
-
         const statusResponse = await this.coreApi.transaction.notification(notification);
         const orderId = statusResponse.order_id;
         const transactionStatus = statusResponse.transaction_status;
@@ -123,15 +115,12 @@ class MidtransService {
         const transactionId = statusResponse.transaction_id;
 
         let orderStatus = 'pending';
-
         if (transactionStatus === 'capture') {
             orderStatus = fraudStatus === 'accept' ? 'paid' : (fraudStatus === 'challenge' ? 'challenge' : 'cancelled');
         } else if (transactionStatus === 'settlement') {
             orderStatus = 'paid';
         } else if (['cancel', 'deny', 'expire'].includes(transactionStatus)) {
             orderStatus = 'cancelled';
-        } else if (transactionStatus === 'refund') {
-            orderStatus = 'refunded';
         }
 
         return { orderId, transactionId, transactionStatus, fraudStatus, orderStatus, statusResponse };
