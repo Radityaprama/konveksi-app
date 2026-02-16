@@ -1,0 +1,19 @@
+# .gitignore file untuk backend
+node_modules/
+.env
+.env.local
+.env.*.local
+dist/
+build/
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# WhatsApp session data
+whatsapp-session/
+.wwebjs_auth/
+.wwebjs_cache/
+
