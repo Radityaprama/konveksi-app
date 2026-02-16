@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
-import Textarea from '../ui/Textarea';
+import Textarea from '../ui/TextArea';
 
 const ContactSection = () => {
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
