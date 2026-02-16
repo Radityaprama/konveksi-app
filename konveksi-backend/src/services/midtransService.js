@@ -22,6 +22,11 @@ class MidtransService {
             return;
         }
 
+        console.log('Midtrans Initializing with:');
+        console.log('- Production:', this.isProduction);
+        console.log('- Server Key:', serverKey ? `${serverKey.substring(0, 10)}...` : 'MISSING');
+        console.log('- Client Key:', clientKey ? `${clientKey.substring(0, 10)}...` : 'MISSING');
+
         this.isConfigured = true;
 
         this.snap = new midtransClient.Snap({
@@ -49,7 +54,7 @@ class MidtransService {
         const { items, customer, total, _id } = order;
 
         const item_details = items.map(item => ({
-            id: item.productId ? String(item.productId) : `item_${Date.now()} `,
+            id: item.productId ? String(item.productId) : `item_${Date.now()}`,
             price: Math.round(Number(item.price) || 0),
             quantity: Number(item.quantity) || 1,
             name: item.name || 'Item',
@@ -57,7 +62,7 @@ class MidtransService {
 
         const parameter = {
             transaction_details: {
-                order_id: `ORDER_${_id}_${Date.now()} `,
+                order_id: `ORDER_${_id}_${Date.now()}`,
                 gross_amount: Math.round(total),
             },
             item_details,
