@@ -1,77 +1,55 @@
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
-import qrcode from 'qrcode-terminal';
+import axios from 'axios';
 
 class WhatsAppService {
   constructor() {
-    this.client = null;
-    this.isReady = false;
-    this.qrCode = null;
-  }
-
-  initialize() {
-    if (this.client) return;
-
-    this.client = new Client({
-      authStrategy: new LocalAuth({
-        dataPath: './whatsapp-session'
-      }),
-      puppeteer: {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
-      }
-    });
-
-    this.client.on('qr', (qr) => {
-      console.log('Scan QR Code berikut untuk login WhatsApp:');
-      qrcode.generate(qr, { small: true });
-      this.qrCode = qr;
-    });
-
-    this.client.on('ready', () => {
-      console.log('WhatsApp client ready');
-      this.isReady = true;
-      this.qrCode = null;
-    });
-
-    this.client.on('authenticated', () => console.log('WhatsApp authenticated'));
-
-    this.client.on('auth_failure', (msg) => {
-      console.error('WhatsApp auth failure:', msg);
-      this.isReady = false;
-    });
-
-    this.client.on('disconnected', (reason) => {
-      console.log('WhatsApp disconnected:', reason);
-      this.isReady = false;
-    });
-
-    this.client.initialize();
+    this.token = process.env.FONNTE_TOKEN;
+    this.isReady = !!this.token;
   }
 
   async sendMessage(phoneNumber, message) {
-    if (!this.isReady) throw new Error('WhatsApp client belum siap');
+    console.log('--- WA Debug Start ---');
+    console.log('Phone Target:', phoneNumber);
+    console.log('Token Present:', !!this.token);
 
+    if (!this.token) {
+      console.error('❌ WhatsApp service not configured: FONNTE_TOKEN missing');
+      return;
+    }
+
+    // Format nomor HP ke 62xxxx
     let formattedNumber = phoneNumber.replace(/\D/g, '');
-
     if (!formattedNumber.startsWith('62')) {
       formattedNumber = formattedNumber.startsWith('0')
         ? '62' + formattedNumber.substring(1)
         : '62' + formattedNumber;
     }
 
-    const chatId = `${formattedNumber}@c.us`;
-    await this.client.sendMessage(chatId, message);
-    console.log(`WA sent to ${formattedNumber}`);
-    return { success: true, phoneNumber: formattedNumber };
+    console.log('Formatted Number:', formattedNumber);
+
+    try {
+      const response = await axios.post('https://api.fonnte.com/send', {
+        target: formattedNumber,
+        message: message,
+        countryCode: '62',
+      }, {
+        headers: {
+          'Authorization': this.token.trim()
+        }
+      });
+
+      console.log('✅ Fonnte Response:', JSON.stringify(response.data));
+      return response.data;
+    } catch (err) {
+      console.error('❌ Fonnte API Error:');
+      console.error('- Message:', err.message);
+      if (err.response) {
+        console.error('- Status:', err.response.status);
+        console.error('- Data:', JSON.stringify(err.response.data));
+      }
+      throw err;
+    } finally {
+      console.log('--- WA Debug End ---');
+    }
   }
 
   async sendOrderNotification(order) {
@@ -96,46 +74,22 @@ class WhatsAppService {
     });
 
     message += `\n*Total: Rp ${total.toLocaleString('id-ID')}*\n`;
-    message += `*Status: ${status.toUpperCase()}*\n\n`;
+    message += `*Status: ${status === 'paid' ? 'BERHASIL' : status.toUpperCase()}*\n\n`;
 
     if (status === 'pending') {
-      message += `Silakan lakukan pembayaran untuk melanjutkan pesanan Anda.\n\n`;
+      message += `Silakan lakukan pembayaran untuk melanjutkan pesanan Anda.\n`;
+      if (order.midtrans?.redirect_url) {
+        message += `Link Pembayaran: ${order.midtrans.redirect_url}\n`;
+      }
+      message += `\n`;
     } else if (status === 'paid') {
       message += `Pesanan Anda akan segera kami proses.\n\n`;
     }
 
     message += `Terima kasih telah berbelanja di Dani Konveksi!`;
 
-    if (!customer.phone) throw new Error('Nomor HP customer tidak tersedia');
+    if (!customer.phone) return;
     return await this.sendMessage(customer.phone, message);
-  }
-
-  async sendPaymentReminder(order) {
-    const { customer, total } = order;
-
-    let message = `*PENGINGAT PEMBAYARAN*\n\n`;
-    message += `Halo ${customer.name},\n\n`;
-    message += `Pesanan Anda dengan total *Rp ${total.toLocaleString('id-ID')}* masih menunggu pembayaran.\n`;
-    message += `Silakan segera lakukan pembayaran agar pesanan dapat kami proses.\n\n`;
-    message += `Terima kasih!`;
-
-    if (customer.phone) return await this.sendMessage(customer.phone, message);
-  }
-
-  getStatus() {
-    return {
-      isReady: this.isReady,
-      hasQR: !!this.qrCode,
-      qrCode: this.qrCode
-    };
-  }
-
-  async disconnect() {
-    if (this.client) {
-      await this.client.destroy();
-      this.isReady = false;
-      this.client = null;
-    }
   }
 }
 
