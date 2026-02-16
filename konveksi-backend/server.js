@@ -28,7 +28,25 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-connectDB();
+// Simpan promise koneksi DB agar bisa di-await
+let dbPromise = connectDB();
+
+// Middleware: pastikan DB sudah terkoneksi sebelum handle request
+app.use(async (req, res, next) => {
+  try {
+    await dbPromise;
+    next();
+  } catch (err) {
+    // Coba reconnect jika gagal
+    dbPromise = connectDB();
+    try {
+      await dbPromise;
+      next();
+    } catch (retryErr) {
+      res.status(500).json({ success: false, message: 'Database connection failed' });
+    }
+  }
+});
 
 // WhatsApp hanya jalan di lokal (Puppeteer tidak support Vercel serverless)
 if (!isVercel) {
