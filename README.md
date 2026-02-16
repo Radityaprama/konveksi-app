@@ -2,12 +2,12 @@
 
 A complete solution for Konveksi business, featuring a React frontend and a Node.js/Express backend with Midtrans payment integration and WhatsApp notifications.
 
-## 🏗 Project Structure
+## Project Structure
 
 - `konveksi-app/`: React (Vite) frontend application.
 - `konveksi-backend/`: Node.js Express API and MongoDB integration.
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### 1. Clone the repository
 ```bash
@@ -49,7 +49,7 @@ cd konveksi
    npm run dev
    ```
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Frontend**: React, Vite, Tailwind CSS, Framer Motion, React Router.
 - **Backend**: Node.js, Express, MongoDB (Mongoose).
@@ -57,7 +57,7 @@ cd konveksi
   - **Payment**: Midtrans
   - **Messaging**: WhatsApp-web.js for automated notifications.
 
-## 📝 Features
+## Features
 
 - Product Catalog & Category Management.
 - Shopping Cart & Checkout System.
