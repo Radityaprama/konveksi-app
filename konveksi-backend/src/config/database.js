@@ -7,6 +7,10 @@ export const connectDB = async () => {
     return conn;
   } catch (error) {
     console.error(`✗ MongoDB Connection Error: ${error.message}`);
-    process.exit(1);
+    // Di Vercel jangan exit, biar serverless tetap jalan
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+    if (!isVercel) {
+      process.exit(1);
+    }
   }
 };

@@ -29,7 +29,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 connectDB();
-whatsappService.initialize();
+
+// WhatsApp hanya jalan di lokal, tidak di Vercel (serverless tidak support Puppeteer)
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+if (!isVercel) {
+  whatsappService.initialize();
+}
 
 app.use('/api/health', healthRoutes);
 app.use('/api/products', productRoutes);
@@ -44,17 +49,23 @@ app.use((req, res) => {
 
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 4000;
-const server = app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Hanya jalankan server listener di lokal (bukan Vercel)
+if (!isVercel) {
+  const PORT = process.env.PORT || 4000;
+  const server = app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err.message);
-  process.exit(1);
-});
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err.message);
+    process.exit(1);
+  });
 
-process.on('SIGTERM', async () => {
-  await whatsappService.disconnect();
-  server.close(() => process.exit(0));
-});
+  process.on('SIGTERM', async () => {
+    await whatsappService.disconnect();
+    server.close(() => process.exit(0));
+  });
+}
+
+// Export untuk Vercel Serverless Functions
+export default app;
