@@ -13,7 +13,6 @@ if (!process.env.MIDTRANS_SERVER_KEY) {
 
 import { connectDB } from './src/config/database.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
-import whatsappService from './src/services/whatsappService.js';
 
 import healthRoutes from './src/routes/healthRoutes.js';
 import productRoutes from './src/routes/productRoutes.js';
@@ -23,6 +22,7 @@ import midtransRoutes from './src/routes/midtransRoutes.js';
 import whatsappRoutes from './src/routes/whatsappRoutes.js';
 
 const app = express();
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
 
 app.use(cors());
 app.use(express.json());
@@ -30,10 +30,20 @@ app.use(express.urlencoded({ extended: true }));
 
 connectDB();
 
-// WhatsApp hanya jalan di lokal, tidak di Vercel (serverless tidak support Puppeteer)
-const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+// WhatsApp hanya jalan di lokal (Puppeteer tidak support Vercel serverless)
 if (!isVercel) {
-  whatsappService.initialize();
+  try {
+    const whatsappModule = await import('./src/services/whatsappService.js');
+    const whatsappService = whatsappModule.default;
+    whatsappService.initialize();
+
+    process.on('SIGTERM', async () => {
+      await whatsappService.disconnect();
+      server.close(() => process.exit(0));
+    });
+  } catch (err) {
+    console.error('WhatsApp init skipped:', err.message);
+  }
 }
 
 app.use('/api/health', healthRoutes);
@@ -50,20 +60,16 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // Hanya jalankan server listener di lokal (bukan Vercel)
+let server;
 if (!isVercel) {
   const PORT = process.env.PORT || 4000;
-  const server = app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 
   process.on('unhandledRejection', (err) => {
     console.error('Unhandled Rejection:', err.message);
     process.exit(1);
-  });
-
-  process.on('SIGTERM', async () => {
-    await whatsappService.disconnect();
-    server.close(() => process.exit(0));
   });
 }
 
